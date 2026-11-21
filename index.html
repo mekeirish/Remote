@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#121212" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Télécommande PC" />
+  <title>Remote</title>
+
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icon-180.png" />
+  <script src="/vendor/socket.io.min.js"></script>
+  <script>
+    // Secours : si le client local est introuvable (serveur plus ancien), on prend le CDN.
+    if (typeof io === "undefined") {
+      document.write('<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"><\/script>');
+    }
+  </script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 14px;
+      background: #121212;
+      color: #f0f0f0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status {
+      font-size: 14px;
+      color: #7dd3fc;
+      font-weight: 500;
+    }
+    .status.disconnected {
+      color: #f87171;
+    }
+    #menuBtn {
+      flex: none;
+      padding: 4px 12px;
+      font-size: 16px;
+      border-radius: 6px;
+      background: #27272a;
+      line-height: 1.3;
+    }
+    #stopBtn {
+      flex: none;
+      padding: 5px 9px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      background: #991b1b;
+      color: #fef2f2;
+      line-height: 1.2;
+    }
+    #stopBtn:active {
+      background: #b91c1c;
+    }
+    #screenBox {
+      display: none;
+      margin-bottom: 10px;
+      background: #0b0b0b;
+      border: 1px solid #333;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    #screenBox.active {
+      display: block;
+    }
+    #screenImg {
+      width: 100%;
+      max-height: 245px;
+      object-fit: contain;
+      display: block;
+      background: #050505;
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+    .screen-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 6px 8px;
+      background: #161616;
+      border-top: 1px solid #262626;
+    }
+    .screen-controls button {
+      padding: 6px 10px;
+      font-size: 13px;
+      border-radius: 6px;
+      background: #312e81;
+      color: #eef2ff;
+    }
+    .screen-controls button.on {
+      background: #0284c7;
+      color: #f0f9ff;
+    }
+    .zoom-badge {
+      font-size: 12px;
+      color: #cbd5e1;
+      min-width: 42px;
+      text-align: center;
+      font-weight: 600;
+    }
+    .editor-wrap {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    textarea {
+      flex: 1;
+      min-width: 0;
+      height: 132px;
+      font-size: 17px;
+      line-height: 1.4;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #3f3f46;
+      background: #1e1e24;
+      color: #fff;
+      resize: none;
+      touch-action: manipulation;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px #38bdf833;
+    }
+    textarea.field-ready {
+      border-color: #4ade80;
+      box-shadow: 0 0 0 2px #4ade8033;
+    }
+    .side-actions {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+      height: 132px;
+    }
+    .square-icon-btn {
+      flex: 1;
+      width: 40px;
+      min-width: 40px;
+      padding: 0;
+      border-radius: 8px;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #escBtn {
+      background: #c2410c;
+    }
+    #escBtn:active {
+      background: #ea580c;
+    }
+    #tabBtn {
+      background: #4338ca;
+    }
+    #tabBtn:active {
+      background: #4f46e5;
+    }
+    #prtscBtn {
+      background: #0f766e;
+    }
+    #prtscBtn:active {
+      background: #0d9488;
+    }
+    #selectAllBtn {
+      background: #1d4ed8;
+    }
+    #selectAllBtn:active {
+      background: #2563eb;
+    }
+    #copyBtn {
+      background: #0284c7;
+    }
+    #copyBtn:active {
+      background: #0369a1;
+    }
+    #pasteBtn {
+      background: #047857;
+    }
+    #pasteBtn:active {
+      background: #059669;
+    }
+    .square-icon-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    button {
+      flex: 1;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 500;
+      border-radius: 8px;
+      border: none;
+      background: #2c2c2c;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:active {
+      filter: brightness(1.15);
+    }
+    #backspaceBtn {
+      background: #9f1239;
+      color: #fff1f2;
+      touch-action: manipulation;
+      user-select: none;
+    }
+    #clearBtn {
+      background: #3f3f46;
+      color: #f4f4f5;
+    }
+    #screenToggleBtn {
+      background: #1e3a5f;
+      color: #e0f2fe;
+    }
+    #screenToggleBtn.on {
+      background: #0369a1;
+      color: #f0f9ff;
+      box-shadow: inset 0 0 0 1px #7dd3fc;
+    }
+    .pointer-area {
+      flex: 1;
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      min-height: 165px;
+    }
+    #trackpad {
+      flex: 1;
+      min-width: 0;
+      background: #1b1b1b;
+      border: 1px solid #3b3b3b;
+      border-radius: 12px;
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 12px;
+      color: #9ca3af;
+      user-select: none;
+    }
+    #trackpad.dragging {
+      border-color: #4ade80;
+      background: #142218;
+      color: #bbf7d0;
+    }
+    .scroll-column {
+      width: 44px;
+      min-width: 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .scroll-column.hidden {
+      display: none;
+    }
+    .scroll-edge-btn {
+      flex: none;
+      width: 44px;
+      height: 32px;
+      padding: 0;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 8px;
+      background: #0e7490;
+      color: #ecfeff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .scroll-edge-btn:active {
+      background: #0891b2;
+    }
+    #scrollBar {
+      flex: 1;
+      width: 44px;
+      background: #16232a;
+      border: 1px solid #0891b266;
+      border-radius: 10px;
+      touch-action: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 4px;
+      color: #67e8f9;
+      user-select: none;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    #scrollBar.scrolling {
+      background: #0c2a3a;
+      border-color: #38bdf8;
+    }
+    .scroll-track-line {
+      flex: 1;
+      width: 4px;
+      margin: 4px 0;
+      border-radius: 999px;
+      background: #1e3a4c;
+    }
+    #leftHoldBtn {
+      background: #166534;
+      color: #f0fdf4;
+    }
+    #leftHoldBtn.active {
+      background: #15803d;
+      color: #ffffff;
+      box-shadow: inset 0 0 0 1px #4ade80;
+    }
+    #rightClickBtn {
+      background: #6b21a8;
+      color: #faf5ff;
+    }
+
+    /* ---------- Panneau "Plus d'actions" ---------- */
+    #menuBackdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 40;
+    }
+    #menuBackdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #menu {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 82dvh;
+      display: flex;
+      flex-direction: column;
+      background: #18181b;
+      border-top: 1px solid #3f3f46;
+      border-radius: 16px 16px 0 0;
+      transform: translateY(105%);
+      transition: transform 0.22s ease;
+      z-index: 41;
+    }
+    #menu.open {
+      transform: none;
+    }
+    .menu-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      font-weight: 600;
+      border-bottom: 1px solid #27272a;
+    }
+    .menu-head button {
+      flex: none;
+      padding: 4px 12px;
+      background: #3f3f46;
+    }
+    .menu-body {
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 2px 14px 18px;
+    }
+    .sec-title {
+      font-size: 12px;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 14px 0 6px;
+    }
+    .grid {
+      display: grid;
+      gap: 6px;
+    }
+    .grid3 { grid-template-columns: repeat(3, 1fr); }
+    .grid4 { grid-template-columns: repeat(4, 1fr); }
+    .grid6 { grid-template-columns: repeat(6, 1fr); }
+    .grid2 { grid-template-columns: repeat(2, 1fr); }
+    .grid button {
+      padding: 10px 2px;
+      font-size: 13px;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      touch-action: manipulation;
+      user-select: none;
+    }
+    #clipText {
+      width: 100%;
+      height: 74px;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+    .info {
+      min-height: 16px;
+      margin-top: 4px;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .opt {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 2px;
+      border-bottom: 1px solid #27272a;
+      font-size: 14px;
+    }
+    .opt input {
+      width: 20px;
+      height: 20px;
+      accent-color: #38bdf8;
+    }
+    #changePinBtn {
+      flex: none;
+      width: 100%;
+      margin-top: 12px;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      font-size: 13px;
+    }
+
+    #installBtn {
+      flex: none;
+      width: 100%;
+      background: #0369a1;
+      font-size: 14px;
+    }
+    #installInfo {
+      line-height: 1.45;
+    }
+
+    /* ---------- Saisie du PIN ---------- */
+    #pinGate {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 24px;
+      text-align: center;
+      background: #121212;
+    }
+    #pinGate.open {
+      display: flex;
+    }
+    #pinInput {
+      width: min(260px, 80%);
+      font-size: 26px;
+      text-align: center;
+      letter-spacing: 0.3em;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #3f3f46;
+      background: #1e1e24;
+      color: #fff;
+    }
+    #pinInput:focus {
+      outline: none;
+      border-color: #38bdf8;
+    }
+    #pinError {
+      min-height: 18px;
+      color: #f87171;
+      font-size: 13px;
+    }
+    #pinBtn {
+      flex: none;
+      width: min(260px, 80%);
+      background: #0369a1;
+    }
+  </style>
+<meta property="og:title" content="Remote">
+<meta name="twitter:title" content="Remote">
+<meta name="application-name" content="Remote">
+<meta name="description" content="Server.py + index">
+<meta property="og:description" content="Server.py + index">
+<meta name="twitter:description" content="Server.py + index">
+<meta property="og:image" content="https://mekeirish.github.io/Remote/icon.png">
+<meta name="twitter:image" content="https://mekeirish.github.io/Remote/icon.png">
+<meta name="twitter:card" content="summary">
+<meta property="og:url" content="https://mekeirish.github.io/Remote/">
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1320x2868.png">
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1206x2622.png">
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1290x2796.png">
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1179x2556.png">
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1284x2778.png">
+<link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1170x2532.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1242x2688.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./splash-828x1792.png">
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1125x2436.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash-1242x2208.png">
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./splash-750x1334.png">
+<link rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./splash-640x1136.png">
+</head>
+<body>
+  <div class="topbar">
+    <div class="status disconnected" id="status">Connexion...</div>
+    <div class="topbar-right">
+      <button id="menuBtn" type="button" title="Plus d'actions" aria-label="Plus d'actions">☰</button>
+      <button id="stopBtn" type="button" title="Arrêter le serveur PC">⏹ Stop</button>
+    </div>
+  </div>
+
+  <div id="screenBox">
+    <img id="screenImg" alt="Aperçu écran PC" title="Touche pour cliquer · appui long = clic droit" />
+    <div class="screen-controls">
+      <button id="zoomOutBtn" type="button" title="Dézoomer">🔍 -</button>
+      <span class="zoom-badge" id="zoomLabel">1.0x</span>
+      <button id="zoomInBtn" type="button" title="Zoomer">🔍 +</button>
+      <button id="followBtn" type="button" class="on" title="Suivre la souris">🎯 Suivi ON</button>
+    </div>
+  </div>
+
+  <div class="editor-wrap">
+    <div class="side-actions">
+      <button id="escBtn" class="square-icon-btn" type="button" title="Échap (Esc)" aria-label="Échap (Esc)">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 14 4 9l5-5" />
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" />
+        </svg>
+      </button>
+      <button id="tabBtn" class="square-icon-btn" type="button" title="Tabulation (Tab)" aria-label="Tabulation (Tab)">
+        <svg viewBox="0 0 24 24">
+          <path d="M4 6v12" />
+          <path d="m8 9 4 3-4 3" />
+          <path d="M20 6v12" />
+          <path d="m16 15-4-3 4-3" />
+        </svg>
+      </button>
+      <button id="prtscBtn" class="square-icon-btn" type="button" title="Capture d'écran PC (PrtSc)" aria-label="Capture d'écran PC (PrtSc)">
+        <svg viewBox="0 0 24 24">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+          <circle cx="12" cy="13" r="4" />
+        </svg>
+      </button>
+    </div>
+
+    <textarea
+      id="editor"
+      autocapitalize="sentences"
+      autocomplete="on"
+      autocorrect="on"
+      spellcheck="true"
+      placeholder="Touchez ici pour ouvrir le clavier... écrivez ou dictez."
+    ></textarea>
+
+    <div class="side-actions">
+      <button id="selectAllBtn" class="square-icon-btn" type="button" title="Sélectionner tout" aria-label="Sélectionner tout">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 4h6M9 20h6M4 9v6M20 9v6M6 4H4v2M18 4h2v2M4 18v2h2M20 18v2h-2" />
+          <rect x="8" y="8" width="8" height="8" rx="1" />
+        </svg>
+      </button>
+      <button id="copyBtn" class="square-icon-btn" type="button" title="Copier" aria-label="Copier">
+        <svg viewBox="0 0 24 24">
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      </button>
+      <button id="pasteBtn" class="square-icon-btn" type="button" title="Coller" aria-label="Coller">
+        <svg viewBox="0 0 24 24">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+          <rect x="8" y="2" width="8" height="4" rx="1" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="backspaceBtn" type="button">⌫ Effacer PC</button>
+    <button id="clearBtn" type="button">Vider champ</button>
+    <button id="screenToggleBtn" type="button">🖥 Écran : OFF</button>
+  </div>
+
+  <div class="pointer-area">
+    <div id="trackpad">Glisser = déplacer souris · Tap = clic · 2 doigts = défiler · Tap 2 doigts = clic droit</div>
+    <div class="scroll-column" id="scrollColumn">
+      <button id="scrollTopBtn" class="scroll-edge-btn" type="button" title="Tout en haut">⤒</button>
+      <div id="scrollBar" title="Glisser verticalement pour défiler">
+        <span>▲</span>
+        <div class="scroll-track-line"></div>
+        <span>▼</span>
+      </div>
+      <button id="scrollBottomBtn" class="scroll-edge-btn" type="button" title="Tout en bas">⤓</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="leftHoldBtn" type="button">🔒 Maintenir clic</button>
+    <button id="rightClickBtn" type="button">Clic droit</button>
+  </div>
+
+  <!-- Panneau "Plus d'actions" (masqué par défaut) -->
+  <div id="menuBackdrop"></div>
+  <div id="menu" role="dialog" aria-label="Plus d'actions">
+    <div class="menu-head">
+      <span>Plus d'actions</span>
+      <button id="menuClose" type="button" aria-label="Fermer">✕</button>
+    </div>
+    <div class="menu-body">
+      <div class="sec-title">Touches</div>
+      <div class="grid grid4">
+        <button type="button" data-key="enter" title="Entrée">⏎ Entrée</button>
+        <button type="button" data-key="up" data-repeat="1" title="Haut">↑</button>
+        <button type="button" data-key="delete" data-repeat="1" title="Supprimer">⌦ Suppr</button>
+        <button type="button" data-key="home" title="Début de ligne">Début</button>
+        <button type="button" data-key="left" data-repeat="1" title="Gauche">←</button>
+        <button type="button" data-key="down" data-repeat="1" title="Bas">↓</button>
+        <button type="button" data-key="right" data-repeat="1" title="Droite">→</button>
+        <button type="button" data-key="end" title="Fin de ligne">Fin</button>
+        <button type="button" data-key="page_up" data-repeat="1" title="Page précédente">Page ↑</button>
+        <button type="button" data-key="page_down" data-repeat="1" title="Page suivante">Page ↓</button>
+        <button type="button" data-key="f5" title="Actualiser (F5)">F5</button>
+        <button type="button" data-key="space" data-repeat="1" title="Espace">Espace</button>
+      </div>
+
+      <div class="sec-title">Raccourcis</div>
+      <div class="grid grid4">
+        <button type="button" data-combo="undo" title="Annuler (Ctrl+Z)">↶ Annuler</button>
+        <button type="button" data-combo="redo" title="Rétablir (Ctrl+Y)">↷ Rétablir</button>
+        <button type="button" data-combo="cut" title="Couper (Ctrl+X)">✂ Couper</button>
+        <button type="button" data-combo="close_tab" title="Fermer l'onglet (Ctrl+W)">✕ Onglet</button>
+        <button type="button" data-combo="alt_tab" title="Changer de fenêtre (Alt+Tab)">⇄ Alt+Tab</button>
+        <button type="button" data-combo="desktop" title="Afficher le bureau (Win+D)">🗔 Bureau</button>
+        <button type="button" data-combo="start" title="Touche Windows">⊞ Win</button>
+        <button type="button" data-combo="new_tab" title="Nouvel onglet (Ctrl+T)">＋ Onglet</button>
+        <button type="button" data-combo="find" title="Rechercher (Ctrl+F)">🔎 Chercher</button>
+        <button type="button" data-combo="save" title="Enregistrer (Ctrl+S)">💾 Enreg.</button>
+      </div>
+
+      <div class="sec-title">Médias</div>
+      <div class="grid grid6">
+        <button type="button" data-media="vol_down" title="Volume -">🔉</button>
+        <button type="button" data-media="vol_up" title="Volume +">🔊</button>
+        <button type="button" data-media="mute" title="Muet">🔇</button>
+        <button type="button" data-media="prev" title="Précédent">⏮</button>
+        <button type="button" data-media="play_pause" title="Lecture / Pause">⏯</button>
+        <button type="button" data-media="next" title="Suivant">⏭</button>
+      </div>
+
+      <div class="sec-title">Presse-papier</div>
+      <textarea id="clipText" placeholder="Texte à envoyer au PC, ou texte reçu du PC"></textarea>
+      <div class="grid grid2">
+        <button type="button" id="clipGetBtn">📥 Récupérer du PC</button>
+        <button type="button" id="clipPhoneBtn">📋 Copier sur le téléphone</button>
+        <button type="button" id="clipSendBtn">📤 Envoyer au PC</button>
+        <button type="button" id="clipPasteBtn">📤 Envoyer + coller</button>
+      </div>
+      <div class="info" id="clipInfo"></div>
+
+      <div id="installBox">
+        <div class="sec-title">Application</div>
+        <button type="button" id="installBtn" style="display: none;">📲 Installer l'application</button>
+        <div class="info" id="installInfo"></div>
+      </div>
+
+      <div class="sec-title">Options</div>
+      <label class="opt"><span>Clavier automatique</span><input type="checkbox" id="optAutoKb" /></label>
+      <label class="opt"><span>Pré-remplir le texte du champ</span><input type="checkbox" id="optPrefill" /></label>
+      <label class="opt"><span>Barre de défilement</span><input type="checkbox" id="optScroll" /></label>
+      <label class="opt"><span>Accélération de la souris</span><input type="checkbox" id="optAccel" /></label>
+      <label class="opt"><span>Garder l'écran allumé</span><input type="checkbox" id="optWake" /></label>
+      <label class="opt"><span>Vibrations</span><input type="checkbox" id="optHaptic" /></label>
+      <button type="button" id="changePinBtn">🔑 Changer de PIN</button>
+    </div>
+  </div>
+
+  <!-- Saisie du PIN -->
+  <div id="pinGate">
+    <div style="font-size: 20px; font-weight: 600;">Télécommande PC</div>
+    <div style="color: #9ca3af; font-size: 14px;">Saisis le code PIN affiché sur le PC</div>
+    <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="off" />
+    <div id="pinError"></div>
+    <button id="pinBtn" type="button">Se connecter</button>
+  </div>
+
+  <script>
+    /* ---------- PIN ---------- */
+    let currentPin = "";
+    try { currentPin = localStorage.getItem("rc_pin") || ""; } catch (e) {}
+
+    const hashMatch = location.hash.match(/pin=(\d{4,12})/);
+    if (hashMatch) {
+      currentPin = hashMatch[1];
+      try { localStorage.setItem("rc_pin", currentPin); } catch (e) {}
+      try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+    }
+
+    const socket = io({ autoConnect: false, auth: (cb) => cb({ pin: currentPin }) });
+
+    const statusEl = document.getElementById("status");
+    const editor = document.getElementById("editor");
+    const trackpad = document.getElementById("trackpad");
+    const scrollBar = document.getElementById("scrollBar");
+    const scrollColumn = document.getElementById("scrollColumn");
+    const screenBox = document.getElementById("screenBox");
+    const screenImg = document.getElementById("screenImg");
+    const screenToggleBtn = document.getElementById("screenToggleBtn");
+    const zoomInBtn = document.getElementById("zoomInBtn");
+    const zoomOutBtn = document.getElementById("zoomOutBtn");
+    const zoomLabel = document.getElementById("zoomLabel");
+    const followBtn = document.getElementById("followBtn");
+    const leftHoldBtn = document.getElementById("leftHoldBtn");
+    const pinGate = document.getElementById("pinGate");
+    const pinInput = document.getElementById("pinInput");
+    const pinError = document.getElementById("pinError");
+
+    function showPinGate(message) {
+      pinError.textContent = message || "";
+      pinInput.value = "";
+      pinGate.classList.add("open");
+      setTimeout(() => pinInput.focus(), 50);
+    }
+
+    function hidePinGate() {
+      pinGate.classList.remove("open");
+      pinInput.blur();
+    }
+
+    function connectWithPin() {
+      if (!currentPin) {
+        showPinGate("");
+        return;
+      }
+      socket.connect();
+    }
+
+    function submitPin() {
+      const v = pinInput.value.trim();
+      if (!/^\d{4,12}$/.test(v)) {
+        pinError.textContent = "Le PIN contient 4 à 12 chiffres";
+        return;
+      }
+      currentPin = v;
+      try { localStorage.setItem("rc_pin", v); } catch (e) {}
+      hidePinGate();
+      statusEl.textContent = "Connexion...";
+      socket.connect();
+    }
+
+    document.getElementById("pinBtn").addEventListener("click", submitPin);
+    pinInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submitPin();
+    });
+
+    socket.on("connect_error", (err) => {
+      const m = (err && err.message) || "";
+      if (m === "unauthorized") {
+        currentPin = "";
+        try { localStorage.removeItem("rc_pin"); } catch (e) {}
+        statusEl.textContent = "Non autorisé";
+        statusEl.classList.add("disconnected");
+        showPinGate("PIN incorrect");
+      } else if (m === "blocked") {
+        currentPin = "";
+        try { localStorage.removeItem("rc_pin"); } catch (e) {}
+        statusEl.textContent = "Trop d'essais";
+        statusEl.classList.add("disconnected");
+        showPinGate("Trop d'essais. Réessaie dans 1 minute.");
+      }
+    });
+
+    /* ---------- Réglages (mémorisés sur le téléphone) ---------- */
+    const settings = {
+      autoKb: true,
+      prefill: true,
+      showScroll: true,
+      accel: true,
+      wake: true,
+      haptic: true
+    };
+    try {
+      Object.assign(settings, JSON.parse(localStorage.getItem("rc_settings") || "{}"));
+    } catch (e) {}
+
+    function saveSettings() {
+      try { localStorage.setItem("rc_settings", JSON.stringify(settings)); } catch (e) {}
+    }
+
+    /* ---------- Variables d'état ---------- */
+    let syncedValue = "";
+    let syncTimer = null;
+    let isComposing = false;
+    let screenEnabled = false;
+    let leftHoldActive = false;
+
+    const zoomLevels = [1.0, 1.5, 2.0, 3.0];
+    let zoomIndex = 0;
+    let followMouse = true;
+
+    const sensitivity = 1.6;
+    let startTime = 0;
+    let movedDistance = 0;
+    let tpMaxTouches = 0;
+    let tpMulti = false;
+    let tpCx = 0;
+    let tpCy = 0;
+    let mvX = 0;
+    let mvY = 0;
+    let twoRemX = 0;
+    let twoRemY = 0;
+
+    let scrollLastY = null;
+    let scrollRemainder = 0;
+    const scrollSensitivity = 0.14;
+
+    let frameUrl = null;
+    let screenCrop = [0, 0, 1, 1];
+
+    /* ---------- Vibrations ---------- */
+    function haptic(ms) {
+      if (settings.haptic && navigator.vibrate) {
+        try { navigator.vibrate(ms || 12); } catch (e) {}
+      }
+    }
+
+    document.addEventListener("click", (e) => {
+      if (e.target.closest && e.target.closest("button")) haptic(12);
+    }, true);
+
+    /* ---------- Écran toujours allumé ---------- */
+    let wakeSentinel = null;
+    let wakeVideo = null;
+    let wakeTimer = null;
+
+    function startWakeVideoFallback() {
+      try {
+        if (!wakeVideo) {
+          const c = document.createElement("canvas");
+          c.width = 16;
+          c.height = 16;
+          if (!c.captureStream) return;
+          const ctx = c.getContext("2d");
+          wakeVideo = document.createElement("video");
+          wakeVideo.setAttribute("playsinline", "");
+          wakeVideo.muted = true;
+          wakeVideo.loop = true;
+          wakeVideo.style.cssText =
+            "position:fixed;bottom:0;left:0;width:2px;height:2px;opacity:0.01;pointer-events:none;";
+          wakeVideo.srcObject = c.captureStream(2);
+          document.body.appendChild(wakeVideo);
+          let t = 0;
+          wakeTimer = setInterval(() => {
+            ctx.fillStyle = (t++ % 2) ? "#000000" : "#010101";
+            ctx.fillRect(0, 0, 16, 16);
+          }, 500);
+        }
+        const p = wakeVideo.play();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {}
+    }
+
+    async function requestWake() {
+      if (!settings.wake) return;
+      try {
+        if ("wakeLock" in navigator) {
+          wakeSentinel = await navigator.wakeLock.request("screen");
+          wakeSentinel.addEventListener("release", () => { wakeSentinel = null; });
+          return;
+        }
+      } catch (e) {}
+      startWakeVideoFallback();
+    }
+
+    function releaseWake() {
+      try { if (wakeSentinel) wakeSentinel.release(); } catch (e) {}
+      wakeSentinel = null;
+      if (wakeVideo) {
+        try { wakeVideo.pause(); } catch (e) {}
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") requestWake();
+    });
+    document.addEventListener("pointerdown", () => requestWake(), { once: true });
+
+    /* ---------- Clavier du téléphone ---------- */
+    const defaultPlaceholder = editor.placeholder;
+    const inputModes = { text: "text", number: "numeric", decimal: "decimal", tel: "tel" };
+    let autoOpened = false;
+
+    function focusEditorForKeyboard() {
+      if (document.activeElement !== editor) {
+        editor.focus({ preventScroll: false });
+      }
+      editor.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    editor.addEventListener("click", () => {
+      focusEditorForKeyboard();
+    });
+
+    editor.addEventListener("touchend", () => {
+      focusEditorForKeyboard();
+    }, { passive: true });
+
+    function resetFieldUI() {
+      editor.classList.remove("field-ready");
+      editor.placeholder = defaultPlaceholder;
+    }
+
+    function resetMirror() {
+      if (syncTimer) clearTimeout(syncTimer);
+      editor.value = "";
+      syncedValue = "";
+    }
+
+    socket.on("input_focus", (data) => {
+      if (!settings.autoKb) return;
+
+      if (data && data.active) {
+        if (syncTimer) clearTimeout(syncTimer);
+        const v = typeof data.value === "string" ? data.value : "";
+        editor.value = v;
+        syncedValue = v;
+
+        const mode = inputModes[data.kind] || "text";
+        if (editor.inputMode !== mode) {
+          editor.blur();
+          editor.inputMode = mode;
+        }
+
+        editor.classList.add("field-ready");
+        editor.placeholder = data.kind === "text"
+          ? "Champ texte détecté · touchez ici si le clavier ne s'ouvre pas"
+          : "Champ numérique détecté · touchez ici si le clavier ne s'ouvre pas";
+
+        editor.focus();
+        try { editor.setSelectionRange(v.length, v.length); } catch (e) {}
+        autoOpened = true;
+      } else {
+        resetFieldUI();
+        if (autoOpened) {
+          editor.blur();
+          autoOpened = false;
+        }
+      }
+    });
+
+    /* ---------- Souris : maintien du clic ---------- */
+    function setLeftHoldUI(held) {
+      leftHoldActive = held;
+      leftHoldBtn.classList.toggle("active", held);
+      leftHoldBtn.textContent = held ? "🔓 Relâcher clic" : "🔒 Maintenir clic";
+      trackpad.classList.toggle("dragging", held);
+      if (held) {
+        trackpad.textContent = "Clic gauche maintenu · Glisse pour déplacer · Clique « Relâcher clic »";
+      } else {
+        trackpad.textContent = "Glisser = déplacer souris · Tap = clic · 2 doigts = défiler · Tap 2 doigts = clic droit";
+      }
+    }
+
+    /* ---------- Aperçu écran ---------- */
+    function updateScreenViewUI() {
+      const z = zoomLevels[zoomIndex];
+      zoomLabel.textContent = z.toFixed(1) + "x";
+      followBtn.textContent = followMouse ? "🎯 Suivi ON" : "🎯 Suivi OFF";
+      followBtn.classList.toggle("on", followMouse);
+      socket.emit("set_screen_view", {
+        zoom: z,
+        follow_mouse: followMouse
+      });
+    }
+
+    socket.on("connect", () => {
+      hidePinGate();
+      statusEl.textContent = "Connecté au PC";
+      statusEl.classList.remove("disconnected");
+      socket.emit("set_prefill", { enabled: settings.prefill });
+      if (screenEnabled) {
+        socket.emit("set_screen_stream", { enabled: true });
+        updateScreenViewUI();
+      }
+    });
+
+    socket.on("disconnect", () => {
+      statusEl.textContent = "Déconnecté";
+      statusEl.classList.add("disconnected");
+      if (leftHoldActive) {
+        setLeftHoldUI(false);
+      }
+    });
+
+    socket.on("screen_frame", (data) => {
+      if (!screenEnabled || !data || !data.image) return;
+      const url = URL.createObjectURL(new Blob([data.image], { type: "image/jpeg" }));
+      const prev = frameUrl;
+      frameUrl = url;
+      if (Array.isArray(data.crop) && data.crop.length === 4) screenCrop = data.crop;
+      const done = () => {
+        if (prev) URL.revokeObjectURL(prev);
+        socket.emit("screen_ack");
+      };
+      screenImg.onload = done;
+      screenImg.onerror = done;
+      screenImg.src = url;
+    });
+
+    screenToggleBtn.addEventListener("click", () => {
+      screenEnabled = !screenEnabled;
+      screenToggleBtn.textContent = screenEnabled ? "🖥 Écran : ON" : "🖥 Écran : OFF";
+      screenToggleBtn.classList.toggle("on", screenEnabled);
+      screenBox.classList.toggle("active", screenEnabled);
+      if (!screenEnabled) {
+        screenImg.removeAttribute("src");
+        if (frameUrl) {
+          URL.revokeObjectURL(frameUrl);
+          frameUrl = null;
+        }
+      } else {
+        updateScreenViewUI();
+      }
+      socket.emit("set_screen_stream", { enabled: screenEnabled });
+    });
+
+    zoomInBtn.addEventListener("click", () => {
+      if (zoomIndex < zoomLevels.length - 1) {
+        zoomIndex++;
+        updateScreenViewUI();
+      }
+    });
+
+    zoomOutBtn.addEventListener("click", () => {
+      if (zoomIndex > 0) {
+        zoomIndex--;
+        updateScreenViewUI();
+      }
+    });
+
+    followBtn.addEventListener("click", () => {
+      followMouse = !followMouse;
+      updateScreenViewUI();
+    });
+
+    /* Toucher l'aperçu : clic à cet endroit ; appui long : clic droit */
+    function screenPoint(clientX, clientY) {
+      const r = screenImg.getBoundingClientRect();
+      const nw = screenImg.naturalWidth;
+      const nh = screenImg.naturalHeight;
+      if (!nw || !nh || !r.width || !r.height) return null;
+      const scale = Math.min(r.width / nw, r.height / nh);
+      const dw = nw * scale;
+      const dh = nh * scale;
+      const ox = r.left + (r.width - dw) / 2;
+      const oy = r.top + (r.height - dh) / 2;
+      const u = (clientX - ox) / dw;
+      const v = (clientY - oy) / dh;
+      if (u < 0 || u > 1 || v < 0 || v > 1) return null;
+      return {
+        x: screenCrop[0] + u * (screenCrop[2] - screenCrop[0]),
+        y: screenCrop[1] + v * (screenCrop[3] - screenCrop[1])
+      };
+    }
+
+    function clickOnScreen(clientX, clientY, button) {
+      const p = screenPoint(clientX, clientY);
+      if (!p) return;
+      socket.emit("mouse_click_at", { x: p.x, y: p.y, button: button });
+    }
+
+    let lpTimer = null;
+    let lpFired = false;
+    let lpStartX = 0;
+    let lpStartY = 0;
+
+    screenImg.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      lpFired = false;
+      lpStartX = t.clientX;
+      lpStartY = t.clientY;
+      clearTimeout(lpTimer);
+      lpTimer = setTimeout(() => {
+        lpFired = true;
+        haptic(30);
+        clickOnScreen(lpStartX, lpStartY, "right");
+      }, 550);
+    }, { passive: true });
+
+    screenImg.addEventListener("touchmove", (e) => {
+      const t = e.touches[0];
+      if (Math.hypot(t.clientX - lpStartX, t.clientY - lpStartY) > 10) {
+        clearTimeout(lpTimer);
+      }
+    }, { passive: true });
+
+    screenImg.addEventListener("touchend", () => clearTimeout(lpTimer), { passive: true });
+    screenImg.addEventListener("touchcancel", () => clearTimeout(lpTimer), { passive: true });
+
+    screenImg.addEventListener("click", (e) => {
+      if (lpFired) {
+        lpFired = false;
+        return;
+      }
+      clickOnScreen(e.clientX, e.clientY, "left");
+    });
+
+    screenImg.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    /* ---------- Synchronisation du texte ---------- */
+    function computeDiff(oldStr, newStr) {
+      let prefixLen = 0;
+      const minLen = Math.min(oldStr.length, newStr.length);
+      while (prefixLen < minLen && oldStr[prefixLen] === newStr[prefixLen]) {
+        prefixLen++;
+      }
+
+      let suffixLen = 0;
+      while (
+        suffixLen < (minLen - prefixLen) &&
+        oldStr[oldStr.length - 1 - suffixLen] === newStr[newStr.length - 1 - suffixLen]
+      ) {
+        suffixLen++;
+      }
+
+      const deleteCount = oldStr.length - prefixLen - suffixLen;
+      const insertText = newStr.slice(prefixLen, newStr.length - suffixLen);
+      const moveAfter = suffixLen;
+      return { deleteCount, insertText, moveAfter };
+    }
+
+    function flushTextSync() {
+      if (isComposing) return;
+      const currentValue = editor.value;
+      if (currentValue === syncedValue) return;
+
+      const { deleteCount, insertText, moveAfter } = computeDiff(syncedValue, currentValue);
+
+      if (deleteCount > 0 || insertText.length > 0) {
+        socket.emit("sync_diff", {
+          delete: deleteCount,
+          insert: insertText,
+          move_after: moveAfter
+        });
+      }
+
+      syncedValue = currentValue;
+    }
+
+    function scheduleTextSync(delayMs = 55) {
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(flushTextSync, delayMs);
+    }
+
+    editor.addEventListener("compositionstart", () => {
+      isComposing = true;
+      if (syncTimer) clearTimeout(syncTimer);
+    });
+
+    editor.addEventListener("compositionend", () => {
+      isComposing = false;
+      scheduleTextSync(45);
+    });
+
+    editor.addEventListener("input", (e) => {
+      if (isComposing) return;
+      const delay = e.inputType === "insertReplacementText" ? 65 : 50;
+      scheduleTextSync(delay);
+    });
+
+    /* ---------- Boutons principaux ---------- */
+    document.getElementById("escBtn").addEventListener("click", () => {
+      flushTextSync();
+      socket.emit("key_esc");
+    });
+
+    document.getElementById("tabBtn").addEventListener("click", () => {
+      flushTextSync();
+      socket.emit("key_tab");
+    });
+
+    document.getElementById("prtscBtn").addEventListener("click", () => {
+      flushTextSync();
+      socket.emit("key_prtsc");
+    });
+
+    document.getElementById("selectAllBtn").addEventListener("click", () => {
+      flushTextSync();
+      socket.emit("shortcut", { action: "select_all" });
+      // La sélection sur le PC sera remplacée par la prochaine saisie :
+      // le champ du téléphone repart de zéro pour rester aligné.
+      resetMirror();
+    });
+
+    document.getElementById("copyBtn").addEventListener("click", () => {
+      flushTextSync();
+      socket.emit("shortcut", { action: "copy" });
+    });
+
+    document.getElementById("pasteBtn").addEventListener("click", () => {
+      flushTextSync();
+      socket.emit("shortcut", { action: "paste" });
+    });
+
+    /* Appui maintenu = répétition (⌫, flèches, Suppr, Page, Espace) */
+    function bindRepeat(btn, fn) {
+      let delayTimer = null;
+      let repTimer = null;
+      const stop = () => {
+        clearTimeout(delayTimer);
+        clearInterval(repTimer);
+        delayTimer = null;
+        repTimer = null;
+      };
+      btn.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        fn();
+        delayTimer = setTimeout(() => {
+          repTimer = setInterval(fn, 70);
+        }, 380);
+      });
+      ["pointerup", "pointercancel", "pointerleave"].forEach((ev) => btn.addEventListener(ev, stop));
+      btn.addEventListener("contextmenu", (e) => e.preventDefault());
+    }
+
+    function doBackspace() {
+      flushTextSync();
+      socket.emit("backspace");
+      if (syncedValue.length > 0) {
+        syncedValue = syncedValue.slice(0, -1);
+        editor.value = syncedValue;
+      }
+    }
+
+    bindRepeat(document.getElementById("backspaceBtn"), doBackspace);
+
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      resetMirror();
+      focusEditorForKeyboard();
+    });
+
+    /* ---------- Pavé tactile ---------- */
+    function centroid(touches) {
+      let x = 0;
+      let y = 0;
+      for (const t of touches) {
+        x += t.clientX;
+        y += t.clientY;
+      }
+      return { x: x / touches.length, y: y / touches.length };
+    }
+
+    function moveMouse(rawDx, rawDy) {
+      let gain = sensitivity;
+      if (settings.accel) {
+        const speed = Math.hypot(rawDx, rawDy);
+        gain *= Math.min(1 + speed * 0.05, 2.6);
+      }
+      mvX += rawDx * gain;
+      mvY += rawDy * gain;
+      const ix = Math.trunc(mvX);
+      const iy = Math.trunc(mvY);
+      if (ix !== 0 || iy !== 0) {
+        mvX -= ix;
+        mvY -= iy;
+        socket.emit("mouse_move", { dx: ix, dy: iy });
+      }
+    }
+
+    trackpad.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        tpMaxTouches = 1;
+        tpMulti = false;
+        startTime = Date.now();
+        movedDistance = 0;
+        mvX = 0;
+        mvY = 0;
+        twoRemX = 0;
+        twoRemY = 0;
+      } else {
+        tpMaxTouches = Math.max(tpMaxTouches, e.touches.length);
+        tpMulti = true;
+      }
+      const c = centroid(e.touches);
+      tpCx = c.x;
+      tpCy = c.y;
+    }, { passive: true });
+
+    trackpad.addEventListener("touchmove", (e) => {
+      const c = centroid(e.touches);
+      const rawDx = c.x - tpCx;
+      const rawDy = c.y - tpCy;
+      tpCx = c.x;
+      tpCy = c.y;
+      movedDistance += Math.hypot(rawDx, rawDy);
+
+      if (e.touches.length >= 2) {
+        // Deux doigts : défilement (sens "tactile" : doigts vers le haut = descendre)
+        twoRemX += -rawDx * scrollSensitivity;
+        twoRemY += rawDy * scrollSensitivity;
+        const sx = Math.trunc(twoRemX);
+        const sy = Math.trunc(twoRemY);
+        if (sx !== 0 || sy !== 0) {
+          twoRemX -= sx;
+          twoRemY -= sy;
+          socket.emit("mouse_scroll", { dx: sx, dy: sy });
+        }
+        return;
+      }
+      if (tpMulti) return;
+      moveMouse(rawDx, rawDy);
+    }, { passive: true });
+
+    trackpad.addEventListener("touchend", (e) => {
+      if (e.touches.length > 0) {
+        const c = centroid(e.touches);
+        tpCx = c.x;
+        tpCy = c.y;
+        return;
+      }
+      const duration = Date.now() - startTime;
+      const limit = tpMaxTouches >= 2 ? 300 : 220;
+      if (duration < limit && movedDistance < 7) {
+        if (tpMaxTouches >= 2) {
+          socket.emit("mouse_click", { button: "right" });
+          haptic(15);
+        } else if (!leftHoldActive) {
+          // Deux taps rapides = deux clics successifs = double-clic Windows
+          socket.emit("mouse_click", { button: "left" });
+          haptic(8);
+        }
+      }
+      tpMaxTouches = 0;
+      tpMulti = false;
+    });
+
+    trackpad.addEventListener("touchcancel", () => {
+      tpMaxTouches = 0;
+      tpMulti = false;
+    });
+
+    /* ---------- Défilement : barre latérale ---------- */
+    document.getElementById("scrollTopBtn").addEventListener("click", () => {
+      socket.emit("mouse_jump", { direction: "top" });
+    });
+
+    document.getElementById("scrollBottomBtn").addEventListener("click", () => {
+      socket.emit("mouse_jump", { direction: "bottom" });
+    });
+
+    scrollBar.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      scrollLastY = t.clientY;
+      scrollRemainder = 0;
+      scrollBar.classList.add("scrolling");
+    }, { passive: true });
+
+    scrollBar.addEventListener("touchmove", (e) => {
+      const t = e.touches[0];
+      if (scrollLastY === null) return;
+
+      const deltaPx = t.clientY - scrollLastY;
+      scrollLastY = t.clientY;
+
+      scrollRemainder += (-deltaPx) * scrollSensitivity;
+      const steps = Math.trunc(scrollRemainder);
+      if (steps !== 0) {
+        scrollRemainder -= steps;
+        socket.emit("mouse_scroll", { dx: 0, dy: steps });
+      }
+    }, { passive: true });
+
+    function endScroll() {
+      scrollLastY = null;
+      scrollRemainder = 0;
+      scrollBar.classList.remove("scrolling");
+    }
+
+    scrollBar.addEventListener("touchend", endScroll);
+    scrollBar.addEventListener("touchcancel", endScroll);
+
+    leftHoldBtn.addEventListener("click", () => {
+      const nextState = !leftHoldActive;
+      setLeftHoldUI(nextState);
+      socket.emit("mouse_left_hold", { hold: nextState });
+    });
+
+    document.getElementById("rightClickBtn").addEventListener("click", () => {
+      socket.emit("mouse_click", { button: "right" });
+    });
+
+    document.getElementById("stopBtn").addEventListener("click", () => {
+      if (confirm("Arrêter le serveur sur le PC ?")) {
+        flushTextSync();
+        if (leftHoldActive) {
+          setLeftHoldUI(false);
+          socket.emit("mouse_left_hold", { hold: false });
+        }
+        socket.emit("stop_server");
+        statusEl.textContent = "Arrêt demandé...";
+        statusEl.classList.add("disconnected");
+      }
+    });
+
+    /* ---------- Panneau "Plus d'actions" ---------- */
+    const menu = document.getElementById("menu");
+    const menuBackdrop = document.getElementById("menuBackdrop");
+
+    function openMenu() {
+      flushTextSync();
+      editor.blur();
+      menu.classList.add("open");
+      menuBackdrop.classList.add("open");
+    }
+
+    function closeMenu() {
+      menu.classList.remove("open");
+      menuBackdrop.classList.remove("open");
+    }
+
+    document.getElementById("menuBtn").addEventListener("click", openMenu);
+    document.getElementById("menuClose").addEventListener("click", closeMenu);
+    menuBackdrop.addEventListener("click", closeMenu);
+
+    function sendKey(name) {
+      flushTextSync();
+      socket.emit("key_press", { key: name, count: 1 });
+      // Le curseur ou le contenu du PC a bougé : le champ du téléphone repart de zéro.
+      resetMirror();
+    }
+
+    menu.querySelectorAll("[data-key]").forEach((btn) => {
+      if (btn.dataset.repeat) {
+        bindRepeat(btn, () => sendKey(btn.dataset.key));
+      } else {
+        btn.addEventListener("click", () => sendKey(btn.dataset.key));
+      }
+    });
+
+    menu.querySelectorAll("[data-combo]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        flushTextSync();
+        socket.emit("hotkey", { name: btn.dataset.combo });
+        if (btn.dataset.combo === "undo" || btn.dataset.combo === "redo" || btn.dataset.combo === "cut") {
+          resetMirror();
+        }
+      });
+    });
+
+    menu.querySelectorAll("[data-media]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        socket.emit("media", { name: btn.dataset.media });
+      });
+    });
+
+    /* ---------- Presse-papier partagé ---------- */
+    const clipText = document.getElementById("clipText");
+    const clipInfo = document.getElementById("clipInfo");
+
+    document.getElementById("clipGetBtn").addEventListener("click", () => {
+      clipInfo.textContent = "Lecture du presse-papier du PC...";
+      socket.emit("clipboard_get");
+    });
+
+    socket.on("clipboard_text", (d) => {
+      const text = (d && d.text) || "";
+      clipText.value = text;
+      clipInfo.textContent = text
+        ? "Reçu du PC (" + text.length + " caractères)"
+        : "Presse-papier du PC vide ou sans texte";
+    });
+
+    document.getElementById("clipPhoneBtn").addEventListener("click", () => {
+      if (!clipText.value) {
+        clipInfo.textContent = "Rien à copier";
+        return;
+      }
+      let ok = false;
+      try {
+        clipText.focus();
+        clipText.select();
+        clipText.setSelectionRange(0, clipText.value.length);
+        ok = document.execCommand("copy");
+      } catch (e) {}
+      clipText.blur();
+      clipInfo.textContent = ok ? "Copié sur le téléphone" : "Copie impossible : sélectionne le texte à la main";
+    });
+
+    function sendClipboard(paste) {
+      const text = clipText.value || editor.value;
+      if (!text) {
+        clipInfo.textContent = "Rien à envoyer";
+        return;
+      }
+      clipInfo.textContent = "Envoi...";
+      socket.emit("clipboard_set", { text: text, paste: paste });
+    }
+
+    document.getElementById("clipSendBtn").addEventListener("click", () => sendClipboard(false));
+    document.getElementById("clipPasteBtn").addEventListener("click", () => {
+      sendClipboard(true);
+      closeMenu();
+    });
+
+    socket.on("clipboard_done", (d) => {
+      if (!d || !d.ok) {
+        clipInfo.textContent = "Échec de l'envoi au presse-papier du PC";
+      } else {
+        clipInfo.textContent = d.pasted ? "Envoyé et collé sur le PC" : "Envoyé au presse-papier du PC";
+      }
+    });
+
+    /* ---------- Options ---------- */
+    const optMap = {
+      optAutoKb: "autoKb",
+      optPrefill: "prefill",
+      optScroll: "showScroll",
+      optAccel: "accel",
+      optWake: "wake",
+      optHaptic: "haptic"
+    };
+
+    function applySettings(changed) {
+      scrollColumn.classList.toggle("hidden", !settings.showScroll);
+      if (changed === "autoKb" && !settings.autoKb) {
+        resetFieldUI();
+        editor.inputMode = "text";
+        autoOpened = false;
+      }
+      if (changed === "prefill") {
+        socket.emit("set_prefill", { enabled: settings.prefill });
+      }
+      if (changed === "wake") {
+        if (settings.wake) requestWake();
+        else releaseWake();
+      }
+    }
+
+    Object.keys(optMap).forEach((id) => {
+      const el = document.getElementById(id);
+      const key = optMap[id];
+      el.checked = !!settings[key];
+      el.addEventListener("change", () => {
+        settings[key] = el.checked;
+        saveSettings();
+        applySettings(key);
+      });
+    });
+
+    document.getElementById("changePinBtn").addEventListener("click", () => {
+      closeMenu();
+      socket.disconnect();
+      currentPin = "";
+      try { localStorage.removeItem("rc_pin"); } catch (e) {}
+      showPinGate("");
+    });
+
+    /* ---------- Installation de la PWA ---------- */
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+    }
+
+    const installBox = document.getElementById("installBox");
+    const installBtn = document.getElementById("installBtn");
+    const installInfo = document.getElementById("installInfo");
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    let deferredInstall = null;
+
+    function updateInstallUI() {
+      if (isStandalone) {
+        installBox.style.display = "none";
+        return;
+      }
+      if (deferredInstall) {
+        installBtn.style.display = "block";
+        installInfo.textContent = "";
+        return;
+      }
+      installBtn.style.display = "none";
+      if (!window.isSecureContext) {
+        installInfo.textContent =
+          "Android : Chrome n'installe que les sites en HTTPS. Pour autoriser cette adresse, ouvre " +
+          "chrome://flags, active « Insecure origins treated as secure », ajoute " + location.origin +
+          " puis relance Chrome. iPhone : Partager > Sur l'écran d'accueil.";
+      } else {
+        installInfo.textContent =
+          "Menu du navigateur > Installer l'application (ou Ajouter à l'écran d'accueil).";
+      }
+    }
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredInstall = e;
+      updateInstallUI();
+    });
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstall = null;
+      updateInstallUI();
+    });
+
+    installBtn.addEventListener("click", async () => {
+      if (!deferredInstall) return;
+      try {
+        deferredInstall.prompt();
+        await deferredInstall.userChoice;
+      } catch (e) {}
+      deferredInstall = null;
+      updateInstallUI();
+    });
+
+    updateInstallUI();
+
+    /* ---------- Démarrage ---------- */
+    applySettings("init");
+    connectWithPin();
+  </script>
+</body>
+</html>
